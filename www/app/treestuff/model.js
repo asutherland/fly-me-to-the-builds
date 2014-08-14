@@ -39,7 +39,7 @@ Push.prototype = {
 function PlatformFamily(opts) {
   this.name = opts.name;
   this.platforms = [];
-
+  this.jobTypeFamilies = [];
 }
 PlatformFamily.prototype = {
 };
@@ -66,6 +66,8 @@ Platform.prototype = {
 /**
  * A grouping of JobTypes.  But these JobTypes are more than friends, they're
  * family.  Man, this is good coffee.
+ *
+ *
  */
 function JobTypeFamily() {
 }
@@ -82,6 +84,8 @@ function JobType(opts) {
   this.originJobType = opts.originJobType || [];
   /** Job types that are run using the result of our job. */
   this.offspringJobTypes = opts.offspringJobTypes || [];
+
+  this.runningETA;
 }
 JobType.prototype = {
 };

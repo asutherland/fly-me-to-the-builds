@@ -49,6 +49,74 @@ var PLATFORM_MATCHER_THINGS = [
   }
 ];
 
+var GENERIC_BUCKET = 'Bucket';
+
+/**
+ * All jobs have symbols.  Those jobs may also be nested under a group that
+ * usefully identifies them.  Despite this provided hierarchy, symbols are
+ * currently unique AFAIK.  Some symbols really should be part of a group but
+ * are not.  For example, Gaia stuff lives under the '?' group symbol.
+ *
+ * NOTE!  We check this literally, then we also use a regex to strip any
+ * numbers off the end and then we check again without the numbers.  This is
+ * because jobs frequently get split up to reduce latency, etc.  Especially
+ * on super slow platforms like the b2g emulator builds.
+ *
+ * I'm also making some editorial decisions here since many of the current
+ * groups are simply artifacts of the testing mechanism in use.
+ */
+var JOB_SYMBOL_TO_JOB_TYPE_FAMILY_OVERRIDES = {
+  // Builds
+  'B': 'Build',
+  'Bd': 'Build', // debug
+  'Bo': 'Build', // opt
+  'Bn': 'Build', // non-unified
+  'Be': 'Build', // engineering build
+  'V': 'Build', // Valgrind
+
+  // Generic Gecko test stuff
+  'Cpp': GENERIC_BUCKET, // C++ unit tests
+  'JP': GENERIC_BUCKET, // Jetpack/Add-on SDK
+  'Mn': GENERIC_BUCKET, // Marionette
+  'Mnw': GENERIC_BUCKET, // Marionette web api
+  'X': GENERIC_BUCKET, // xpcshell tests
+  'Set': GENERIC_BUCKET, // Happens on Android 4.2 x86opt. no clue.
+
+  // JS engine
+  'J': 'JS',
+  'Jit': 'JS', // prefix variants are handled below
+
+  // Layout / Graphics
+  'R': 'Layout', // reftest stuff
+  'Ripc': 'Layout',
+  'Rs': 'Layout',
+  'Ru': 'Layout',
+  'R-oop': 'Layout',
+
+  // Gaia stuff
+  'Li': 'Gaia',
+  'G': 'Gaia', // Gaia unit tests
+  'Gb': 'Gaia', // Gaia build infra tests
+  'Gi': 'Gaia', // Gaia JS integration tests
+  'Gu': 'Gaia', // Gaia Python integration tests,
+
+  // - Mochitest clobberin'
+  // Browser chrome tests
+  'bc': 'Chrome',
+
+  // Devtools
+  'dt': 'Devtools',
+
+  // Weird mochitest weirdness
+  'M-oop': 'Mochitest',
+};
+
+var GROUP_NAME_OVERRIDES = {
+  'Mochitest e10s': 'e10s',
+  // let's avoid random stupid group names
+  'Unknown': GENERIC_BUCKET,
+  'unknown': GENERIC_BUCKET
+};
 
 /**
  * @param opts
@@ -124,6 +192,10 @@ Normalizer.prototype = {
 
     return platform;
   },
+  
+  _getOrMakeJob: function(groupName, rawJob) {
+
+  },
 
   _rawJobToObj: function(rawJobArr) {
     var propNames = this.jobPropertyNames;
@@ -134,12 +206,30 @@ Normalizer.prototype = {
     return wireObj;
   },
 
-  _normalizeGroup: function(push, platform) {
+  _normalizeJob: function(push, platform, groupName, rawJob) {
+    var wireJob = this._rawJobToObj(rawJob);
+  },
+
+  /**
+   * Groups are almost entirely boring from our perspective; the only useful
+   * bit of info they provide is the indication that we're dealing with a
+   * mochitest.  So we just call into _normalizeJob and give it the family as
+   * a hint if it doesn't have overrides.
+   */
+  _normalizeGroup: function(push, platform, rawGroup) {
+    for (var i = 0; i < rawGroup.jobs.length; i++) {
+      var rawJob = rawGroup.jobs[i];
+      this._normalizeJob(push, platform, rawGroup.name, rawJob);
+    }
   },
 
   _normalizePlatform: function(push, rawPlatform) {
     var platform = this._getOrMakePlatform(rawPlatform);
 
+    for (var i = 0; i < rawPlatform.groups.length; i++) {
+      var rawGroup = rawPlatform.groups[i];
+      this._normalizeGroup(push, platform, rawGroup);
+    }
   },
 
 
@@ -172,6 +262,7 @@ Normalizer.prototype = {
       this._normalizePlatform(push, rawPlatform);
     }
 
+    return push;
   },
 };
 
