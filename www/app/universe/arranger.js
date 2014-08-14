@@ -25,7 +25,18 @@
  * the "linux" system with the planet "build" which then would have moons named
  * "opt32", "opt64", "asan64", etc.
  *
- * Once builds complete, rockets 
+ * Once builds complete, rockets fly from their build planets to their test
+ * planets.
+ *
+ * An important cheat we do right now is that we don't actually understand the
+ * task dependency graph.  It's my understanding that the new taskcluster work
+ * will make all that stupidly easy for us to understand, but we don't bother
+ * right now.  In most cases everybody lives inside their specific "platform"
+ * so it doesn't matter.  But there are clearly oddities like the Windows 7/8
+ * platforms where there's no build.  There's either a configuration problem
+ * or they're reusing the XP builds or something.  But that doesn't matter to
+ * us!  So test rockets take off from the windows 8 planet without anyone
+ * landing on it?  They probably have some robots down there.  Or space ghosts!
  **/
 
 define(function(require) {
