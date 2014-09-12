@@ -1,0 +1,20 @@
+.star {
+  fill: yellow;
+}
+
+.planet {
+  fill: brown;
+}
+
+.moon {
+  fill: grey;
+}
+
+.rocket {
+  fill: silver;
+}
+
+.route {
+  fill: #222222;
+}
+

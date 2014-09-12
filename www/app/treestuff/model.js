@@ -66,10 +66,9 @@ Platform.prototype = {
 /**
  * A grouping of JobTypes.  But these JobTypes are more than friends, they're
  * family.  Man, this is good coffee.
- *
- *
  */
-function JobTypeFamily() {
+function JobTypeFamily(opts) {
+  this.name = opts.name;
 }
 JobTypeFamily.prototype = {
 };

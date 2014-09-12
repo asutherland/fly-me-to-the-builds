@@ -25,10 +25,15 @@
  *
  * ### Coordinate Space and Transforms ###
  *
- * The center of the build planet in each system has position 0,0.  All the
- * positions in the system are relative to that since all of the other things in
- * the system are dependent on the build planet and therefore it basically is
- * their origin point.
+ * The center of the build planet in each system during system layout has
+ * position 0,0.  All the positions in the system are relative to that since all
+ * of the other things in the system are dependent on the build planet's and
+ * therefore it basically is their origin point.
+ *
+ * After the system is laid out it is relocated by manually transforming all
+ * existing coordinates.  Rockets need to cross between systems so they benefit
+ * from a unified coordinate space.  Additionally, we do not dynamically apply
+ * any transforms; nothing rotates, orbits, or soars majestically through space.
  *
  * ### The Circle of Rocket Life ###
  *
@@ -86,7 +91,7 @@ var d3 = require('d3');
  * The nodes in the great celestial hierarchy of the universe.
  */
 function Celestial(opts) {
-  /** star, planet, moon, station */
+  /** universe, star, planet, moon, station */
   this.type = opts.type || 'unknown';
   this.name = opts.name || ('unexplored ' + this.type);
 
@@ -95,8 +100,13 @@ function Celestial(opts) {
 
   /** What Celestial do we ourselves orbit?  null if we're the star */
   this.parent = opts.parent || null;
+  if (opts.parent) {
+    this.parent._addKid(this);
+  }
+  this.descendants = [];
+
   /** What things are orbiting us? */
-  this.kids = opts.kids || [];
+  this.kids = [];
   this.kidsByName = {};
 
   /**
@@ -108,47 +118,116 @@ function Celestial(opts) {
   this.rocketsFrom = opts.rocketsFrom || [];
   this.rocketsTo = opts.rocketsTo || [];
 
-  this.x = 0;
-  this.y = 0;
-  this.radius = 0;
+  this.x = 0.0;
+  this.y = 0.0;
+  this.radius = 0.0;
+
+  this.effectiveDistance = 0.0;
 }
 Celestial.prototype = {
+  _addKid: function(kid) {
+    this.kids.push(kid);
+    this.kidsbyName[kid.name] = kid;
+    // walk up the parent chain fill out the descendants sets
+    var ancestor = this;
+    while (ancestor) {
+      ancestor.descendants.push(kid);
+      ancestor = ancestor.parent;
+    }
+  },
+
   computeAverageOfKids: function(accessor) {
     return d3.mean(this.kids, accessor);
   },
+
+  translateSelfAndDescendants: function(tx, ty) {
+    this.x += tx;
+    this.y += ty;
+
+    for (var i = 0; i < this.descendants.length; i++) {
+      var offspring = this.descendants[i];
+      offspring.x += tx;
+      offspring.y += ty;
+    }
+  }
 };
 
+function compareETAs(a, b) {
+  return a.jobType.runningETA - b.jobType.runningETA;
+}
+function getETA(moon) {
+  return moon.jobType.runningETA;
+}
+function compareEffectiveDistances() {
+}
+
 /**
- * Layout out the universe based on the resultSets (pushes) provided.
+ * Layout out the universe based on the normalized "PlatformFamily"s provided.
  *
  * We layout systems before we position them.  We layout the build planet and
  * its moons, then we position the other planets in the system, then their
  * moons.
  *
- * @param resultSets
  * @param opts
- * @param {Boolean} [opts.useEstimates=false]
- *   If true, indicates we should use the estimates provided.
+ * @param {PlatformFamily[]} opts.platformFamilies
+ *   The platform families that will become our systems.  They contain within
+ *   them all the information we need to birth a fantastic new universe of
+ *   rocket ships just exploding all over the place.  Like horrible, horrible
+ *   fireworks.
  */
-function UniverseArranger(resultSets, opts) {
+function UniverseArranger(opts) {
+  this.platformFamilies = opts.platformFamilies;
+
   /** Proper star systems */
-  this.systems = [];
-  /** Random stuff that lives outside of systems */
-  this.deepSpaceJunk = [];
+  this.universe = new Celestial({
+    type: 'universe',
+    name: opts.universeName || 'Universe',
+  });
+
+
+  this._mapPlatformFamiliesToSystems();
 }
 UniverseArranger.prototype = {
+  //////////////////////////////////////////////////////////////////////////////
+  // Building Celestial instances from treestuff's models
+
+  _mapJobTypeFamilyToPlanet: function(system, jobTypeFamily) {
+    var planet = new Celestial({
+      type: 'planet',
+      name:
+    });
+  },
+
+  _mapPlatformFamilyToSystem: function(platformFamily) {
+    var system = new Celestial({
+      type: 'star',
+      name: platformFamily.name,
+      // you can't land on a star! (which is what a jobType means)
+      jobType: null,
+      parent: this.universe,
+    });
+
+    // Celestial instances self-link into their parent.
+    platformFamily.jobTypeFamilies.forEach(
+      this._mapJobTypeFamily.bind(this, system));
+
+    return system;
+  },
+
+  _mapPlatformFamiliesToSystems: function() {
+    this.systems = this.platformFamilies.map(
+                     this._mapPlatformFamilyToSystem.bind(this));
+  },
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Arranging
 
   /**
-   * Position the moons around their already-positioned planet.
+   * Position the moons around their already-positioned planet (meaning x, y,
+   * radius, and effectiveDistance have been set.)
    */
   _positionMoons: function(planet) {
     // Sort the moons by ETA
-    function compareETAs(a, b) {
-      return a.jobType.runningETA - b.jobType.runningETA;
-    }
-    function getETA(moon) {
-      return moon.jobType.runningETA;
-    }
     planet.kids.sort(compareETAs);
 
 
@@ -158,31 +237,44 @@ UniverseArranger.prototype = {
   },
 
   /**
-   * Calculate the size of each system.
-   *
-   * We put our fastest build as the moon closest to the home system and the
-   * longest/slowest test on the exact opposite side of the system.  We can
-   * then use the relative build times of the other moons to position them
-   * around their planet.
+   * Arrange the stuff inside a system.
    */
-  _sizeSystems: function() {
+  _layoutSystem: function(system) {
+    // -- Build Planet first!
+    // The build planet defines the origin point of the system.
+    var buildPlanet = system.namedKids['Build'];
+    buildPlanet.x = 0;
+    buildPlanet.y = 0;
+
+    // Like all planets/moons, the planet wants to live at the average of the
+    // moon's running times.  So we compute that and that lets us figure out how
+    // to position the moons.
+    buildPlanet.effectiveDistance = buildPlanet.computeAverageOfKids(getETA);
+
+    this._positionMoons(buildPlanet);
+
+    // -- The other planets
+    var otherPlanets = system.kids.filter(function(planet) {
+      return planet !== buildPlanet;
+    });
+
+    var suckyPlanet = null;
+    function makeSuckyPlanet() {
+      suckyPlanet = new Celestial({
+      });
+    }
+
+    // Find the averages, kick out sucky moons to the sucky planet
+    otherPlanets.forEach(function() {
+
+    }.bind(this));
+
   },
 
   /**
    * Position systems based on their sizes.
    */
   _positionSystems: function() {
-  },
-
-  /**
-   * Arrange the stuff inside a system.
-   */
-  _layoutSystem: function(system) {
-    var buildPlanet = system.namedKids['Build'];
-    // we actually already put everyone at 0,0.  Yay!
-
-
-
   },
 
   arrange: function() {
