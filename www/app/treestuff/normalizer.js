@@ -179,6 +179,7 @@ Normalizer.prototype = {
         name: platformInfo.name
       });
       this._platformFamiliesByName[platformFamily.name] = platformFamily;
+      this.platformFamilies.push(platformFamily);
     }
 
     // self-links into the PlatformFamily
@@ -192,22 +193,75 @@ Normalizer.prototype = {
 
     return platform;
   },
-  
-  _getOrMakeJob: function(groupName, rawJob) {
 
+  _getOrMakeJobTypeFamily: function(platform, name) {
+    var platformFamily = platform.family;
+    var jobTypeFamily = platformFamily._jobTypeFamiliesByName[name];
+    if (jobTypeFamily) {
+      return jobTypeFamily;
+    }
+    jobTypeFamily = platformFamily._jobTypeFamiliesByName[name] =
+      new $model.JobTypeFamily({
+        name: name
+      });
+    platformFamily.jobTypeFamilies.push(jobTypeFamily);
+    return jobTypeFamily;
+  },
+
+  _getOrMakeJobType: function(platform, wireJob) {
+    var jobTypeSymbol = wireJob.job_type_symbol;
+    var jtMatch = /^(\D+)-?(\d+)$/.exec(jobTypeSymbol);
+    var jobTypeSymbolRoot = jtMatch ? jtMatch[1] : jobTypeSymbol;
+    var jobTypeFamilyName =
+          JOB_SYMBOL_TO_JOB_TYPE_FAMILY_OVERRIDES[jobTypeSymbolRoot] ||
+          GROUP_NAME_OVERRIDES[wireJob.job_group_name] ||
+          wireJob.job_group_name;
+
+    var jobTypeFamily = this._getOrMakeJobTypeFamily(platform,
+                                                     jobTypeFamilyName);
+
+    var jobTypeName = jtMatch ? jtMatch[2] : jobTypeSymbol;
+
+    var jobType = jobTypeFamily._jobTypesByName[jobTypeName];
+    if (!jobType) {
+      jobType = jobTypeFamily._jobTypesByName[jobTypeName] =
+        new $model.JobType({
+          family: jobTypeFamily,
+          name: jobTypeName,
+          runningETA: wireJob.running_eta
+        });
+      jobTypeFamily.jobTypes.push(jobType);
+    }
+    return jobType;
   },
 
   _rawJobToObj: function(rawJobArr) {
     var propNames = this.jobPropertyNames;
     var wireObj = {};
     for (var i = 0; i < propNames.length; i++) {
-     wireObj[propNames[i]] = rawJobArr[i];
+      wireObj[propNames[i]] = rawJobArr[i];
     }
     return wireObj;
   },
 
   _normalizeJob: function(push, platform, groupName, rawJob) {
     var wireJob = this._rawJobToObj(rawJob);
+    //console.log('jg', groupName, wireJob);
+    var job = push.jobsById[wireJob.id];
+    if (!job) {
+      var jobType = this._getOrMakeJobType(platform, wireJob);
+
+      job = push.jobsById[wireJob.id] = new $model.Job({
+        jobType: jobType,
+        push: push,
+        wireObj: wireJob
+      });
+      push.jobs.push(job);
+    }
+    else {
+      job.update(wireJob);
+    }
+    return job;
   },
 
   /**

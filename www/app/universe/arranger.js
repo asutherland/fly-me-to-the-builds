@@ -40,7 +40,7 @@
  * Rockets start out in the "VCS" system launching from planet "git" or "hg" or
  * something like that.  This is conceptually amusing, but it might need to be
  * changed to something involving more planets/moons/etc. for the purposes of
- * spreading out the rocket paths
+ * spreading out the rocket paths.
  *
  * Rockets next travel to "build" moons surrounding the planet "build" in
  * whatever platform-named system they're traveling to.  So for example we have
@@ -127,7 +127,7 @@ function Celestial(opts) {
 Celestial.prototype = {
   _addKid: function(kid) {
     this.kids.push(kid);
-    this.kidsbyName[kid.name] = kid;
+    this.kidsByName[kid.name] = kid;
     // walk up the parent chain fill out the descendants sets
     var ancestor = this;
     while (ancestor) {
@@ -194,10 +194,14 @@ UniverseArranger.prototype = {
   _mapJobTypeFamilyToPlanet: function(system, jobTypeFamily) {
     var planet = new Celestial({
       type: 'planet',
-      name:
+      name: jobTypeFamily.name
     });
   },
 
+  /**
+   * Give a PlatformFamily, create a 'star' system for it, recursively mapping
+   * sub-stuff.
+   */
   _mapPlatformFamilyToSystem: function(platformFamily) {
     var system = new Celestial({
       type: 'star',
@@ -209,7 +213,7 @@ UniverseArranger.prototype = {
 
     // Celestial instances self-link into their parent.
     platformFamily.jobTypeFamilies.forEach(
-      this._mapJobTypeFamily.bind(this, system));
+      this._mapJobTypeFamilyToPlanet.bind(this, system));
 
     return system;
   },
@@ -222,6 +226,7 @@ UniverseArranger.prototype = {
   //////////////////////////////////////////////////////////////////////////////
   // Arranging
 
+
   /**
    * Position the moons around their already-positioned planet (meaning x, y,
    * radius, and effectiveDistance have been set.)
@@ -230,7 +235,23 @@ UniverseArranger.prototype = {
     // Sort the moons by ETA
     planet.kids.sort(compareETAs);
 
+    var angleStep = Math.PI * 2 / planet.kids.length;
+    var angles = [Math.PI];
+    var numOffAxis = planet.kids.length - 2;
+    for (var i = 0, j = 0; i < numOffAxis; i += 2, j++) {
+      angles.push(Math.PI - angleStep * j);
+      if (i + 1 < numOffAxis) {
+        angles.push(Math.PI + angleStep * j);
+      }
+    }
+    angles.push(0);
 
+    planet.kids.forEach(function(moon, iMoon) {
+      var angle = angles[iMoon];
+      var dist = 60;
+      moon.x = planet.x + dist * Math.cos(angle);
+      moon.y = planet.y + dist * Math.sin(angle);
+    });
   },
 
   _positionPlanet: function(planet, angle) {
@@ -242,7 +263,7 @@ UniverseArranger.prototype = {
   _layoutSystem: function(system) {
     // -- Build Planet first!
     // The build planet defines the origin point of the system.
-    var buildPlanet = system.namedKids['Build'];
+    var buildPlanet = system.kidsByName['Build'];
     buildPlanet.x = 0;
     buildPlanet.y = 0;
 
@@ -286,6 +307,8 @@ UniverseArranger.prototype = {
 };
 
 return {
+  Celestial: Celestial,
+  UniverseArranger: UniverseArranger
 };
 
 }); // end define

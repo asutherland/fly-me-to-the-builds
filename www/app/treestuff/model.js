@@ -40,6 +40,7 @@ function PlatformFamily(opts) {
   this.name = opts.name;
   this.platforms = [];
   this.jobTypeFamilies = [];
+  this._jobTypeFamiliesByName = {};
 }
 PlatformFamily.prototype = {
 };
@@ -64,11 +65,13 @@ Platform.prototype = {
 };
 
 /**
- * A grouping of JobTypes.  But these JobTypes are more than friends, they're
- * family.  Man, this is good coffee.
+ * A grouping of JobTypes; "Mochitests" is a JobTypeFamily while "Mochitest 1"
+ * is a JobType.  (And a specific Mochitest 1 run is a "Job".)
  */
 function JobTypeFamily(opts) {
   this.name = opts.name;
+  this.jobTypes = [];
+  this._jobTypesByName = {};
 }
 JobTypeFamily.prototype = {
 };
@@ -79,12 +82,15 @@ JobTypeFamily.prototype = {
  * be an example of a JobTypeFamily.
  */
 function JobType(opts) {
+  this.family = opts.family;
+  this.name = opts.name;
+
   /** Is there a job that gave rise to our job? */
   this.originJobType = opts.originJobType || [];
   /** Job types that are run using the result of our job. */
   this.offspringJobTypes = opts.offspringJobTypes || [];
 
-  this.runningETA;
+  this.runningETA = opts.runningETA || 0;
 }
 JobType.prototype = {
 };
@@ -103,11 +109,12 @@ function Job(opts) {
 Job.prototype = {
   update: function(wireObj) {
     /** The timestamp of when we were scheduled. */
-    this.schedTS;
+    this.schedTS = wireObj.submit_timestamp;
     /** The timestamp of when we started running. */
-    this.startTS;
+    this.startTS = wireObj.start_timestamp;
     /** The timestamp of when we finished running. */
-    this.endTS;
+    this.endTS = wireObj.end_timestamp;
+    this.state = wireObj.state;
   },
 
   /**
@@ -122,6 +129,7 @@ Job.prototype = {
 return {
   Push: Push,
   PlatformFamily: PlatformFamily,
+  Platform: Platform,
   JobTypeFamily: JobTypeFamily,
   JobType: JobType,
   Job: Job
